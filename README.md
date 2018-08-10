@@ -31,4 +31,6 @@ Work in progress.
 ## Goals
 
 - Implementation
-- Cancellation API
+- Cancellation API (`task.cancel()`)
+- Deferred constructor API (`new Task((resolve, reject) => {})`)
+  - Should reduce API surface
