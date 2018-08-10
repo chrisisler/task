@@ -4,9 +4,7 @@
 
 ## Install
 
-```sh
-yarn add Task
-```
+Not published yet.
 
 ## Usage
 

@@ -4,7 +4,7 @@
   "description": "Super sick conformant implementation of Promises/A+",
   "main": "lib/task.js",
   "module": "lib/task.es.js",
-  "repository": "https://github.com/chrisisler/task.git",
+  "repository": "https://github.com/chrisisler/task",
   "keywords": [
     "promise",
     "promises",
@@ -31,6 +31,8 @@
     "prepublish": "yarn clean && yarn build"
   },
   "devDependencies": {
+    "babel-core": "^6.26.3",
+    "babel-preset-flow": "^6.23.0",
     "flow-bin": "^0.78.0",
     "prettier": "^1.14.2",
     "promises-aplus-tests": "*",

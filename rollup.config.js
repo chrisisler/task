@@ -2,18 +2,16 @@ import babel from 'rollup-plugin-babel'
 import pkg from './package.json'
 
 export default {
-  input: 'index.js',
+  input: 'src/task.js',
   output: [
     {
       file: pkg.main,
-      format: 'cjs'
+      format: 'cjs',
     },
     {
       file: pkg.module,
-      format: 'es'
-    }
+      format: 'es',
+    },
   ],
-  plugins: [
-    babel()
-  ]
+  plugins: [babel()],
 }
