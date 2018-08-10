@@ -5,6 +5,17 @@
   "main": "lib/task.js",
   "module": "lib/task.es.js",
   "repository": "https://github.com/chrisisler/task.git",
+  "keywords": [
+    "promise",
+    "promises",
+    "promises-a",
+    "promises-aplus",
+    "async",
+    "await",
+    "deferred",
+    "future",
+    "task"
+  ],
   "author": {
     "name": "Chris Isler",
     "email": "christopherisler1@gmail.com",
@@ -12,10 +23,17 @@
   },
   "license": "MIT",
   "private": false,
-  "scripts": {},
+  "scripts": {
+    "test": "promises-aplus-tests test/spec",
+    "build": "rollup -c",
+    "format": "prettier --write **/*.{js,json,md}",
+    "clean": "rm -rf lib",
+    "prepublish": "yarn clean && yarn build"
+  },
   "devDependencies": {
     "flow-bin": "^0.78.0",
     "prettier": "^1.14.2",
+    "promises-aplus-tests": "*",
     "rollup": "^0.64.1",
     "rollup-plugin-babel": "^3.0.7"
   }

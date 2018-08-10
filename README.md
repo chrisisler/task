@@ -29,3 +29,8 @@ task
 ## API
 
 Work in progress.
+
+## Goals
+
+- Implementation
+- Cancellation API
