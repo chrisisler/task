@@ -1,9 +1,15 @@
 // @flow
 
-const warning: Function =
-  typeof process === 'object' && process.env.NODE_ENV === 'production'
-    ? function noop() {}
-    : function warning(condition: boolean, message: string) {
+const processExists = typeof process === 'object'
+
+const warning: Function = (_ => {
+  // Keep track of warning messages to avoid duplicates.
+  let warned: Set<string> = new Set()
+  let _warning = function warningMuted() {}
+
+  if (processExists && process.env.NODE_ENV !== 'production') {
+    _warning = function warning(condition: boolean, message: string): void {
+      if (!warned.has(message)) {
         if (condition) {
           if (console && typeof console.warn === 'function') {
             console.warn('Warning: ' + message)
@@ -12,16 +18,19 @@ const warning: Function =
           try {
             // Throw error so people can trace calls here.
             throw Error(message)
-          } catch (error) {
-            // No.
-          }
+          } catch (error) {}
         }
       }
+    }
+  }
+
+  return _warning
+})()
 
 const defer: Function = (_ => {
   let _defer
 
-  if (typeof process === 'object' && typeof process.nextTick === 'function') {
+  if (processExists && typeof process.nextTick === 'function') {
     _defer = process.nextTick
   } else if (typeof setImmediate === 'function') {
     _defer = setImmediate
@@ -32,159 +41,90 @@ const defer: Function = (_ => {
   return callback => _defer(callback)
 })()
 
+type State = 'Pending' | 'Resolved' | 'Rejected'
 const Pending = 'Pending'
 const Resolved = 'Resolved'
 const Rejected = 'Rejected'
 
-//todo
-type State = Pending | Resolved | Rejected
+// extract :: (Task<T> | T) => T
+function extract(thing) {
+  if (thing) {
+    if (typeof thing === 'function' || typeof thing === 'object') {
+      let called = false
 
-export default class Task<T: any | void> {
-  _status: State = Pending
-  _value: T | void = void 0
-  _resolveHandlers: Array<Function> = []
-  _rejectHandlers: Array<Function> = []
-
-  // constructor(f: (Function, Function) => void) {}
-  constructor() {}
-
-  // This current implementation uses the non-existent constructor
-  static resolve(value: T | void): Task<T> {
-    let task = new Task()
-
-    if (value) {
-      if (typeof value === 'function' || typeof value === 'object') {
-        let called = false
-
-        try {
-          if (typeof value.then === 'function') {
-            value.then(
-              nextValue => {
-                if (!called) {
-                  called = true
-                  task._settle(Resolved, nextValue)
-                }
-              },
-              reason => {
-                if (!called) {
-                  called = true
-                  task._settle(Rejected, reason)
-                }
-              },
-            )
-          } else {
-            task._settle(Resolved, value)
-          }
-        } catch (error) {
-          // Reject if accessing `.then` prop throws.
-          if (!called) {
-            called = true
-            task._settle(Rejected, value)
-          }
+      try {
+        const isPromise = typeof thing.then === 'function'
+        if (isPromise) {
+          thing.then(value => {
+            if (!called) {
+              called = true
+            }
+          })
         }
-      }
-    } else {
-      // Resolve/fulfill promise if unknown input type.
-      task._settle(Resolved, value)
-
-      // ???
-      // task.then(value)
-      // task.then(() => value)
-    }
-
-    // todo type errors
-    return task
-  }
-
-  // TODO
-  static reject(reason: T | mixed): Task<T> {
-    return new Task()
-  }
-
-  // _done is only used by `task.then` and `task.catch`
-  _done(resolveHandler: Function, rejectHandler: Function): void {
-    if (this._status === Pending) {
-      this._resolveHandlers.push(resolveHandler)
-      this._rejectHandlers.push(rejectHandler)
-    } else {
-      defer(() => {
-        if (this._status === Resolved && typeof resolveHandler === 'function') {
-          resolveHandler(this._value)
-        } else if (
-          this._status === Rejected &&
-          typeof rejectHandler === 'function'
-        ) {
-          rejectHandler(this._value)
-        }
-      })
+      } catch (error) {}
     }
   }
+  return void 0
+}
 
-  _settle(status: State, value: T): void {
-    if (this._status !== Pending) {
-      this._status = status
-      this._value = value
-
-      defer(() => {
-        let handlers =
-          status === Resolved ? this._resolveHandlers : this._rejectHandlers
-
-        handlers.forEach(handle => {
-          if (typeof handle === 'function') {
-            handle(value)
-          }
-        })
-
-        // Clear both arrays.
-        this._resolveHandlers.length = this._rejectHandlers.length = 0
-      })
-    }
+export default function Task<T>(executor: (Function, Function) => void) {
+  if (!(this instanceof Task)) {
+    throw TypeError('Cannot call the Task class as a function')
+  } else if (typeof executor !== 'function') {
+    throw TypeError('Expected a function')
+  } else if (executor.length < 1) {
+    throw TypeError('Expected function to take at least one argument')
   }
 
-  then(resolveHandler?: Function, rejectHandler?: Function): Task<T> {
-    let task = new Task()
+  let value: ?T = void 0
+  let state: State = Pending
+  let resolveHandlers: Array<Function> = []
+  let rejectHandlers: Array<Function> = []
+  let hasCatch = false
 
-    const onResolve = value => {
-      if (resolveHandler && typeof resolveHandler === 'function') {
-        try {
-          task = Task.resolve(resolveHandler(value))
-        } catch (error) {
-          task = Task.reject(error)
-        }
-      }
+  executor(
+    function resolve(_value) {
+      state = Resolved
+      value = extract(_value)
+    },
+    function reject(reason) {
+      state = Rejected
+      value = extract(reason)
     }
+  )
 
-    const onReject = reason => {
-      if (rejectHandler && typeof rejectHandler === 'function') {
-        warning(true, 'Prefer `.catch` rather than `.then` for error handling.')
-
-        try {
-          task = Task.resolve(rejectHandler(reason))
-        } catch (error) {
-          task = Task.reject(error)
-        }
-      }
-    }
-
-    this._done(onResolve, onReject)
-
-    return task
-  }
-
-  // with deferred constuctor api
-  // dev_then(onRes, onRej): Task<T> {
-  //   return new Task((res, rej) => {
-  //     if (onRes && typeof onRes === 'function') {
+  // prettier-ignore
+  // this.then = (onResolved?: ?T => ?T): Task<T> => {
+  //   if (typeof onResolved === 'function') {
+  //     return new Task((resolve, reject) => {
   //       try {
-  //         res(onRes(this._value))
+  //         // $FlowFixMe
+  //         resolve(onResolved(value))
   //       } catch (error) {
-  //         rej(error)
+  //         warning(!hasCatch, 'Unhandled promise rejection.')
+  //         reject(error)
   //       }
-  //     }
-  //   })
+  //     })
+  //   }
+  //   return this
   // }
 
-  catch(rejectHandler: Function): Task<T> {
-    return this.then(void 0, rejectHandler)
+  // prettier-ignore
+  this.then = (onResolved?: ?T => (?T | ?Task<T>)): Task<T> => {
+    if (typeof onResolved === 'function') {
+      try {
+        value = extract(onResolved(value))
+        state = Resolved
+      } catch (error) {
+        state = Rejected
+        value = error
+      }
+    }
+    return this
   }
+
+  // prettier-ignore
+  // this.catch = (onRejected?: ?T => ?T): Task<T> => {
+  //   hasCatch = true
+  // }
 }

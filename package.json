@@ -14,7 +14,9 @@
     "await",
     "deferred",
     "future",
-    "task"
+    "task",
+    "cancel",
+    "cancellable"
   ],
   "author": {
     "name": "Chris Isler",
@@ -25,13 +27,15 @@
   "private": false,
   "scripts": {
     "test": "promises-aplus-tests test/spec",
-    "build": "rollup -c",
+    "build": "rollup --config",
+    "build:watch": "rollup --config --watch",
     "format": "prettier --write **/*.{js,json,md}",
     "clean": "rm -rf lib",
-    "prepublish": "yarn clean && yarn build"
+    "prepublish": "yarn clean && yarn build && yarn test && yarn format"
   },
   "devDependencies": {
     "babel-core": "^6.26.3",
+    "babel-plugin-transform-class-properties": "^6.24.1",
     "babel-preset-flow": "^6.23.0",
     "flow-bin": "^0.78.0",
     "prettier": "^1.14.2",
