@@ -3,9 +3,8 @@
 > Super sick conformant implementation of Promises/A+
 
 - Zero dependencies
-- Same API as ES6 Promises
+- [Promises/A+](https://promisesaplus.com) compliant
 - Adds cancellation
-- [Promises/A+](https://promisesaplus.com)
 
 ## Install
 
@@ -16,16 +15,16 @@ Not published yet.
 ```javascript
 import Task from 'task'
 
-let promise = new Task((resolve, reject) => {
+let task = new Task((resolve, reject) => {
   resolve('yay!')
 })
 
-promise
-  .then(resolved => {
-    console.log(resolved)
+task
+  .then(value => {
+    console.log(value)
   })
-  .catch(reason => {
-    console.error(reason)
+  .catch(error => {
+    console.error(error)
   })
 ```
 
@@ -33,7 +32,5 @@ promise
 
 - Implementation (WIP)
 - Cancellation API
-- Deferred constructor API: `new Task((resolve, reject) => {})`
-  - Should reduce API surface: `_done()`
 - Helpful warnings (see Bluebird)
 - Try out Prepacc

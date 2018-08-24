@@ -5,6 +5,7 @@ import { warning, defer } from './util'
 const Pending = 'Pending'
 const Resolved = 'Resolved'
 const Rejected = 'Rejected'
+type State = 'Pending' | 'Resolved' | 'Rejected'
 
 // ecma-international.org/ecma-262/6.0/#sec-promise-objects
 export default function Task(executor: Function) {
@@ -16,11 +17,15 @@ export default function Task(executor: Function) {
     throw TypeError('Expected function to take at least one argument')
   }
 
-  let hasCatch = false
   let value = void 0
-  let state = Pending
-  let resolveReactions = []
-  let rejectReactions = []
+  let state: State = Pending
+
+  // For warning about tasks without rejection handlers.
+  let hasCatch = false
+
+  // Handlers to be invoked when state goes from Pending to Resolved/Rejected.
+  let resolveReactions: Array<Function> = []
+  let rejectReactions: Array<Function> = []
 
   {
     let executed = false
@@ -52,6 +57,7 @@ export default function Task(executor: Function) {
 
   // ecma-international.org/ecma-262/6.0/#sec-promise.prototype.then
   this.__proto__.then = (onResolved, onRejected) => {
+    // TODO: Move state from Pending to Resolved/Rejected when _xReaction() is called
     return new Task((resolve, reject) => {
       if (typeof onResolved !== 'function') {
         onResolved = function identity(x) {
@@ -93,11 +99,18 @@ export default function Task(executor: Function) {
   }
 
   // $FlowFixMe
-  this.__proto__[Symbol.toStringTag] = `<${value}>`
+  this.__proto__[Symbol.toStringTag] = `<${
+    state === Pending ? 'pending' : String(value)
+  }>`
 }
 
 Task.resolve = resolution => {
-  if (resolution && typeof resolution.then === 'function') {
+  if (
+    resolution &&
+    (typeof resolution === 'object' || typeof resolution === 'function') &&
+    typeof resolution.then === 'function'
+  ) {
+    // if (resolution && typeof resolution.then === 'function') {
     if (resolution.constructor.name === 'Task') {
       return resolution
     }
@@ -120,5 +133,22 @@ Task.resolve = resolution => {
 }
 
 // Task.reject = rejection => {}
-// Task.all = tasks => {}
 // Task.race = tasks => {}
+
+Task.all = tasks => {
+  if (!Array.isArray(tasks)) {
+    throw TypeError('Expected an array')
+  }
+
+  let values = []
+
+  return new Task((resolve, reject) => {
+    let index = 0
+    while (index < tasks.length) {
+      let task = tasks[index]
+      // TODO
+      index += 1
+    }
+    return values
+  })
+}

@@ -1,7 +1,7 @@
 {
   "name": "Task",
   "version": "0.0.0",
-  "description": "Conformant implementation of Promises/A+",
+  "description": "Super sick conformant implementation of Promises/A+",
   "main": "lib/task.js",
   "module": "lib/task.es.js",
   "repository": "https://github.com/chrisisler/task",
