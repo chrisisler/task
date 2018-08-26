@@ -2,9 +2,12 @@
 
 > Super sick conformant implementation of Promises/A+
 
+A Task is an object that is used as a placeholder for the eventual results of a
+deferred (and possibly asynchronous) computation.
+
 - Zero dependencies
 - [Promises/A+](https://promisesaplus.com) compliant
-- Adds cancellation
+- Cancellable
 
 ## Install
 
@@ -28,9 +31,12 @@ task
   })
 ```
 
+Promises basically 
+
 ## Goals
 
-- Implementation (WIP)
+- Implementation
 - Cancellation API
 - Helpful warnings (see Bluebird)
 - Try out Prepacc
+- `task.finally(fn)`
