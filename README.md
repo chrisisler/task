@@ -40,3 +40,12 @@ Promises basically
 - Helpful warnings (see Bluebird)
 - Try out Prepacc
 - `task.finally(fn)`
+
+## Learned
+
+The difficult part about implementing Promises is:
+
+- correctly managing callbacks and when to invoke them
+- finding good variable names
+  - describing something well implies understanding it
+- the functionality Promises provide is an API like Rust's `Result` type which provides access to the results of deferred callbacks 

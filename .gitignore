@@ -1,6 +1,8 @@
 lib
 demo.js
 
+.vscode
+
 # Logs
 logs
 *.log
