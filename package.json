@@ -8,7 +8,6 @@
   "keywords": [
     "promise",
     "promises",
-    "promises-a",
     "promises-aplus",
     "async",
     "await",
@@ -26,12 +25,12 @@
   "license": "MIT",
   "private": false,
   "scripts": {
-    "test": "promises-aplus-tests test/spec",
+    "test": "yarn build && promises-aplus-tests test/spec.js",
     "build": "rollup --config",
     "build:watch": "rollup --config --watch",
     "format": "prettier --write **/*.{js,json,md}",
     "clean": "rm -rf lib",
-    "prepublish": "yarn clean && yarn build && yarn test && yarn format"
+    "prepublish": "yarn clean && yarn test && yarn format"
   },
   "devDependencies": {
     "babel-core": "^6.26.3",

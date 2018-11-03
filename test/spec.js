@@ -1,26 +1,23 @@
+// @flow
 // https://github.com/promises-aplus/promises-tests
 
-import promisesAplusTests from 'promises-aplus-tests'
-import Task from '../lib/task'
+const Task = require('../lib/task')
 
-const testAdapter = {
-  resolved(value) {
-    return Task.resolve(value)
-  },
-
-  rejected(reason) {
-    return Task.reject(reason)
-  },
+module.exports = {
+  resolved: Task.resolve,
+  rejected: Task.reject,
 
   deferred() {
-    return {
-      promise: new Task(),
-      resolve: Task.resolve,
-      reject: Task.reject,
-    }
-  },
-}
+    let actions = {}
+    let task = new Task((resolve, reject) => {
+      actions.resolve = resolve
+      actions.reject = reject
+    })
 
-promisesAplusTests(testAdapter, err => {
-  console.error(err)
-})
+    return {
+      promise: task,
+      resolve: actions.resolve,
+      reject: actions.reject
+    }
+  }
+}

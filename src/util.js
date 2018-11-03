@@ -11,14 +11,14 @@ export const warning: Function = (_ => {
     _warning = function warning(condition: boolean, message: string): void {
       if (!warned.has(message)) {
         if (condition) {
-          if (console && typeof console.warn === 'function') {
+          if (console != null && typeof console.warn === 'function') {
             console.warn('Warning: ' + message)
           }
 
           try {
             // Throw error so people can trace calls here.
             throw Error(message)
-          } catch (error) {}
+          } catch (_) {}
         }
       }
     }
@@ -38,5 +38,5 @@ export const defer: Function = (_ => {
     _defer = setTimeout
   }
 
-  return callback => _defer(callback)
+  return _defer
 })()

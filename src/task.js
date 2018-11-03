@@ -1,156 +1,116 @@
-// @flow
+const hasProcess = typeof process === 'object'
 
-import { warning, defer } from './util'
+const defer =
+  hasProcess && typeof process.nextTick === 'function'
+    ? process.nextTick
+    : typeof setImmediate === 'function'
+      ? setImmediate
+      : setTimeout
+
+const warning =
+  hasProcess &&
+  process.env.NODE_ENV !== 'production' &&
+  console != null &&
+  typeof console.warn === 'function'
+    ? function warning(condition, message) {
+        if (condition) {
+          console.warn('Warning: ' + message)
+        }
+
+        // Pump fake error throw so calls can be traced here.
+        try {
+          throw Error(message)
+        } catch (_) {}
+      }
+    : function warningMuted() {}
 
 const Pending = 'Pending'
 const Resolved = 'Resolved'
 const Rejected = 'Rejected'
-type State = 'Pending' | 'Resolved' | 'Rejected'
 
-export default function Task(executor: Function) {
+export default function Task(executor) {
   if (!(this instanceof Task)) {
-    throw TypeError('Cannot call `Task` as a function, use `new Task` instead')
-  } else if (typeof executor !== 'function') {
-    throw TypeError(`Expected a function, instead received ${typeof executor}`)
-  } else if (executor.length < 1) {
-    throw TypeError('Expected function to take at least one argument')
+    throw TypeError('Task must be instantiated with `new` keyword')
   }
 
+  let state = Pending
   let value = void 0
-  let state: State = Pending
-  let resolvedReactions: ?Array<Function> = []
-  let rejectedReactions: ?Array<Function> = []
-  let taskErrorsHandled = false
+  let resolvedReactions = []
+  let rejectedReactions = []
+  let errorsHandled = false
 
-  executor(
-    function resolve(resolution) {
-      settle(Resolved, resolution)
-    },
-    function reject(rejection) {
-      settle(Rejected, rejection)
-    }
-  )
-
-  // $FlowFixMe
-  // this.__proto__[Symbol.toStringTag] = `Value: <${
-  //   state === Pending ? 'pending' : String(value)
-  // }>`
-
-  this.catch = (onRejected: Function) => {
-    if (typeof onRejected === 'function') {
-      taskErrorsHandled = true
-    }
-    return this.then(void 0, onRejected)
-  }
-
-  this.then = (onResolved?: Function, onRejected?: Function) => {
-    // if (typeof onResolved !== 'function' && state === Resolved) {
-    //   return this
-    // }
-    return new Task((resolve, reject) => {
-      let nextTask = { resolve, reject }
-
-      let resolveReaction = resolved => {
-        if (typeof onResolved === 'function') {
-          try {
-            let nextValue = onResolved.call(void 0, resolved)
-            resolutionProcedure(nextValue, nextTask)
-          } catch (error) {
-            reject(error)
-          }
-        } else {
-          resolve(resolved)
-        }
-      }
-      let rejectReaction = rejected => {
-        if (typeof onRejected === 'function') {
-          taskErrorsHandled = true
-          try {
-            let nextValue = onRejected.call(void 0, rejected)
-            resolutionProcedure(nextValue, nextTask)
-          } catch (error) {
-            reject(error)
-          }
-        } else {
-          reject(rejected)
-        }
-      }
-
-      if (state === Pending) {
-        // $FlowFixMe - This array will be valid, not undefined.
-        resolvedReactions.push(resolveReaction)
-        // $FlowFixMe - This array will be valid, not undefined.
-        rejectedReactions.push(rejectReaction)
-      } else {
-        defer(() => {
-          if (state === Resolved) {
-            resolveReaction(value)
-          } else if (state === Rejected) {
-            warning(!taskErrorsHandled, 'Unhandled Task rejection.')
-            rejectReaction(value)
-          }
-        })
-      }
-    })
-  }
-
-  function resolutionProcedure(
-    v: ?any,
-    nextTask: { resolve: Function, reject: Function }
-  ): void {
-    if (v && (typeof v === 'function' || typeof v === 'object')) {
-      let called = false
+  if (executor != void 0) {
+    if (typeof executor !== 'function') {
+      throw TypeError(
+        `Expected a function, instead received ${typeof executor}`
+      )
+    } else {
+      let executed = false
 
       try {
-        let then = v.then
-
-        if (typeof then === 'function') {
-          then.call(
-            v,
-            resolved => {
-              if (!called) {
-                called = true
-                resolutionProcedure(resolved, nextTask)
-              }
-            },
-            rejected => {
-              if (!called) {
-                called = true
-                nextTask.reject(rejected)
-              }
+        executor(
+          function resolve(value) {
+            if (!executed) {
+              executed = true
+              settle(Resolved, value)
             }
-          )
-        } else {
-          nextTask.resolve(v)
-        }
-      } catch (error) {
-        if (!called) {
-          called = true
-          nextTask.reject(error)
-        }
+          },
+          function reject(reason) {
+            if (!executed) {
+              executed = true
+              settle(Rejected, reason)
+            }
+          }
+        )
+      } catch (reason) {
+        executed = true
+        // warning(!errorsHandled, 'Unhandled Task rejection.')
+        settle(Rejected, reason)
       }
-    } else {
-      nextTask.resolve(v)
     }
   }
 
-  function settle(settledState: 'Resolved' | 'Rejected', settled: ?any): void {
+  this.done = (resolveReaction, rejectReaction, _errorsHandled) => {
+    // console.log('_errorsHandled is:', _errorsHandled)
+    errorsHandled = _errorsHandled
     if (state === Pending) {
-      state = settledState
-      value = settled
+      resolvedReactions.push(resolveReaction)
+      rejectedReactions.push(rejectReaction)
+    } else {
+      defer(() => {
+        if (state === Resolved) {
+          resolveReaction(value)
+        } else if (state === Rejected) {
+          // warning(!errorsHandled, 'Unhandled Task rejection.')
+          rejectReaction(value)
+        }
+      })
+    }
+  }
+
+  this.resolve = resolvedValue => {
+    settle(Resolved, resolvedValue)
+  }
+
+  this.reject = rejectedValue => {
+    settle(Rejected, rejectedValue)
+  }
+
+  function settle(completedState, completedValue) {
+    if (state === Pending) {
+      state = completedState
+      value = completedValue
 
       defer(() => {
         let reactions =
           state === Resolved ? resolvedReactions : rejectedReactions
 
-        // $FlowFixMe - This array will be valid, not undefined.
         reactions.forEach(reaction => {
           if (typeof reaction === 'function') {
-            reaction(value)
+            reaction(completedValue)
           }
         })
 
-        // Garbage collect.
         resolvedReactions = null
         rejectedReactions = null
       })
@@ -158,7 +118,93 @@ export default function Task(executor: Function) {
   }
 }
 
-function isThenable(x: ?any): boolean {
+Task.prototype = {
+  constructor: Task,
+  catch: function(rejectReaction) {
+    // if (typeof onRejected === 'function') {
+    //   errorsHandled = true // out of scope
+    // }
+    return this.then(void 0, rejectReaction)
+  },
+  then: function(onResolved, onRejected) {
+    let task = new Task()
+
+    const resolveReaction = resolvedValue => {
+      if (typeof onResolved === 'function') {
+        try {
+          resolutionProcedure(task, onResolved(resolvedValue))
+        } catch (error) {
+          task.reject(error)
+        }
+      } else {
+        task.resolve(resolvedValue)
+      }
+    }
+
+    let _errorsHandled = false
+    const rejectReaction = rejectedValue => {
+      if (typeof onRejected === 'function') {
+        _errorsHandled = true
+        try {
+          resolutionProcedure(task, onRejected(rejectedValue))
+        } catch (error) {
+          task.reject(error)
+        }
+      } else {
+        task.reject(rejectedValue)
+      }
+    }
+
+    this.done(resolveReaction, rejectReaction, _errorsHandled)
+
+    return task
+  }
+}
+
+function resolutionProcedure(task, x) {
+  if (task === x) {
+    task.reject(TypeError('The task and its value refer to the same object'))
+  }
+
+  if (x && (typeof x === 'function' || typeof x === 'object')) {
+    let called = false
+    let then
+
+    try {
+      then = x.then
+
+      if (typeof then === 'function') {
+        then.call(
+          x,
+          resolvedValue => {
+            if (!called) {
+              called = true
+              resolutionProcedure(task, resolvedValue)
+            }
+          },
+          rejectedValue => {
+            if (!called) {
+              called = true
+              task.reject(rejectedValue)
+            }
+          }
+        )
+      } else {
+        task.resolve(x)
+      }
+    } catch (error) {
+      if (!called) {
+        called = true
+        task.reject(error)
+      }
+    }
+  } else {
+    task.resolve(x)
+  }
+}
+
+// function isThenable(x: ?any): boolean {
+function isThenable(x) {
   return (
     x != null &&
     (typeof x === 'object' || typeof x === 'function') &&
@@ -167,52 +213,44 @@ function isThenable(x: ?any): boolean {
   )
 }
 
+function getClassName(x) {
+  let ctor = x.constructor
+  let className = ctor && ctor.name
+  return className
+}
+
 Task.resolve = resolution => {
-  if (isThenable(resolution)) {
-    if (resolution.constructor.name === 'Task') {
-      return resolution
-    }
-    // $FlowFixMe - This is fine.
-    return resolution.then(
-      res => {
-        return new Task(resolve => {
-          resolve(res)
-        })
-      },
-      rej => {
-        return new Task((_, reject) => {
-          reject(rej)
-        })
-      }
-    )
-  }
   return new Task(resolve => {
     resolve(resolution)
   })
+
+  // if (isThenable(resolution)) {
+  //   if (getClassName(resolution) === 'Task') {
+  //     return resolution
+  //   } else {
+  //     return resolution.then(Task.resolve, Task.reject)
+  //   }
+  // } else {
+  //   return new Task(resolve => {
+  //     resolve(resolution)
+  //   })
+  // }
 }
 
 Task.reject = rejection => {
-  if (isThenable(rejection)) {
-    if (rejection.constructor.name === 'Task') {
-      return rejection
-    }
-    // $FlowFixMe - This is fine.
-    return rejection.then(
-      res => {
-        return new Task(resolve => {
-          resolve(res)
-        })
-      },
-      rej => {
-        return new Task((_, reject) => {
-          reject(rej)
-        })
-      }
-    )
-  }
   return new Task((_, reject) => {
     reject(rejection)
   })
+
+  // if (isThenable(rejection)) {
+  //   if (getClassName(rejection) === 'Task') {
+  //     return rejection
+  //   } else {
+  //     return rejection.then(Task.resolve, Task.reject)
+  //   }
+  // } else {
+  //   return new Task((_, reject) => {
+  //     reject(rejection)
+  //   })
+  // }
 }
-// Task.race = tasks => {}
-// Task.all = tasks => {}
