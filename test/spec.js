@@ -4,10 +4,15 @@
 const Task = require('../lib/task')
 
 module.exports = {
-  resolved: Task.resolve,
-  rejected: Task.reject,
+  resolved(value /*: mixed */) {
+    return Task.resolve(value)
+  },
 
-  deferred() {
+  rejected(reason /*: mixed */) {
+    return Task.reject(reason)
+  },
+
+  deferred() /*: { promise: *, resolve: any => void, reject: any => void } */ {
     let actions = {}
     let task = new Task((resolve, reject) => {
       actions.resolve = resolve

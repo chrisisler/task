@@ -1,18 +1,20 @@
-const hasProcess = typeof process === 'object'
+// @flow
+
+const hasProcess = isObject(process)
 
 const defer =
-  hasProcess && typeof process.nextTick === 'function'
+  hasProcess && isFunction(process.nextTick)
     ? process.nextTick
-    : typeof setImmediate === 'function'
+    : isFunction(setImmediate)
       ? setImmediate
       : setTimeout
 
 const warning =
   hasProcess &&
   process.env.NODE_ENV !== 'production' &&
-  console != null &&
-  typeof console.warn === 'function'
-    ? function warning(condition, message) {
+  isDefined(console) &&
+  isFunction(console.warn)
+    ? function warning(condition: boolean, message: string): void {
         if (condition) {
           console.warn('Warning: ' + message)
         }
@@ -22,66 +24,72 @@ const warning =
           throw Error(message)
         } catch (_) {}
       }
-    : function warningMuted() {}
+    : function warningMuted(condition: boolean, message: string): void {}
 
-const Pending = 'Pending'
-const Resolved = 'Resolved'
-const Rejected = 'Rejected'
+const Pending = Symbol('Pending')
+const Resolved = Symbol('Resolved')
+const Rejected = Symbol('Rejected')
 
-export default function Task(executor) {
+type State = Symbol
+type TaskType = *
+type Executor = (resolve: (any) => void, reject: (any) => void) => void
+type Reaction = any => void
+
+export default function Task(executor?: Executor) {
   if (!(this instanceof Task)) {
     throw TypeError('Task must be instantiated with `new` keyword')
   }
 
-  let state = Pending
   let value = void 0
-  let resolvedReactions = []
-  let rejectedReactions = []
-  let errorsHandled = false
+  let state: State = Pending
+  let resolvedReactions: ?Array<Reaction> = []
+  let rejectedReactions: ?Array<Reaction> = []
 
   if (executor != void 0) {
-    if (typeof executor !== 'function') {
+    if (!isFunction(executor)) {
       throw TypeError(
         `Expected a function, instead received ${typeof executor}`
       )
     } else {
       let executed = false
 
+      const reject = (reason: any): void => {
+        if (!executed) {
+          executed = true
+          settle(Rejected, reason)
+        }
+      }
+
+      const resolve = (value: any): void => {
+        if (!executed) {
+          executed = true
+          settle(Resolved, value)
+        }
+      }
+
       try {
-        executor(
-          function resolve(value) {
-            if (!executed) {
-              executed = true
-              settle(Resolved, value)
-            }
-          },
-          function reject(reason) {
-            if (!executed) {
-              executed = true
-              settle(Rejected, reason)
-            }
-          }
+        const result = executor(resolve, reject)
+        warning(
+          result != null,
+          'Returning a value is a no-op. Call `resolve` or `reject` instead.'
         )
       } catch (reason) {
-        executed = true
-        // warning(!errorsHandled, 'Unhandled Task rejection.')
-        settle(Rejected, reason)
+        reject(reason)
       }
     }
   }
 
-  this.done = (resolveReaction, rejectReaction, _errorsHandled) => {
-    // console.log('_errorsHandled is:', _errorsHandled)
-    errorsHandled = _errorsHandled
+  this.done = (resolveReaction: Reaction, rejectReaction: Reaction): void => {
     if (state === Pending) {
+      // $FlowFixMe - This array will be defined at this time.
       resolvedReactions.push(resolveReaction)
+      // $FlowFixMe - This array will be defined at this time.
       rejectedReactions.push(rejectReaction)
     } else {
       defer(() => {
         if (state === Resolved) {
           resolveReaction(value)
         } else if (state === Rejected) {
-          // warning(!errorsHandled, 'Unhandled Task rejection.')
           rejectReaction(value)
         }
       })
@@ -96,7 +104,7 @@ export default function Task(executor) {
     settle(Rejected, rejectedValue)
   }
 
-  function settle(completedState, completedValue) {
+  function settle(completedState: State, completedValue: any): void {
     if (state === Pending) {
       state = completedState
       value = completedValue
@@ -105,10 +113,9 @@ export default function Task(executor) {
         let reactions =
           state === Resolved ? resolvedReactions : rejectedReactions
 
-        reactions.forEach(reaction => {
-          if (typeof reaction === 'function') {
-            reaction(completedValue)
-          }
+        // $FlowFixMe - This array will be defined at this time.
+        reactions.filter(isFunction).forEach((r: Reaction) => {
+          r(value)
         })
 
         resolvedReactions = null
@@ -120,18 +127,17 @@ export default function Task(executor) {
 
 Task.prototype = {
   constructor: Task,
-  catch: function(rejectReaction) {
-    // if (typeof onRejected === 'function') {
-    //   errorsHandled = true // out of scope
-    // }
-    return this.then(void 0, rejectReaction)
+  catch: function(onRejected?: any => ?any): TaskType {
+    return this.then(void 0, onRejected)
   },
-  then: function(onResolved, onRejected) {
+  then: function(onResolved?: any => ?any, onRejected?: any => ?any): TaskType {
     let task = new Task()
 
-    const resolveReaction = resolvedValue => {
-      if (typeof onResolved === 'function') {
+    const hasOnResolved = isFunction(onResolved)
+    const resolveReaction: Reaction = resolvedValue => {
+      if (hasOnResolved) {
         try {
+          // $FlowFixMe - `onResolved` is a function in this block.
           resolutionProcedure(task, onResolved(resolvedValue))
         } catch (error) {
           task.reject(error)
@@ -141,10 +147,13 @@ Task.prototype = {
       }
     }
 
-    let _errorsHandled = false
-    const rejectReaction = rejectedValue => {
-      if (typeof onRejected === 'function') {
-        _errorsHandled = true
+    const rejectReaction: Reaction = rejectedValue => {
+      if (isFunction(onRejected)) {
+        // `foo.then(onRes, onRej)` is an anti-pattern, warn the user.
+        // warning(
+        //   hasOnResolved,
+        //   'Prefer using Task#catch over Task#then for error propagation'
+        // )
         try {
           resolutionProcedure(task, onRejected(rejectedValue))
         } catch (error) {
@@ -155,25 +164,28 @@ Task.prototype = {
       }
     }
 
-    this.done(resolveReaction, rejectReaction, _errorsHandled)
+    this.done(resolveReaction, rejectReaction)
 
     return task
   }
+  // finally: function() {
+  // TODO
+  // }
 }
 
-function resolutionProcedure(task, x) {
+function resolutionProcedure(task: TaskType, x: any): void {
   if (task === x) {
     task.reject(TypeError('The task and its value refer to the same object'))
   }
 
-  if (x && (typeof x === 'function' || typeof x === 'object')) {
+  if (x != null && (isFunction(x) || typeof x === 'object')) {
     let called = false
     let then
 
     try {
       then = x.then
 
-      if (typeof then === 'function') {
+      if (isFunction(then)) {
         then.call(
           x,
           resolvedValue => {
@@ -203,54 +215,76 @@ function resolutionProcedure(task, x) {
   }
 }
 
-// function isThenable(x: ?any): boolean {
-function isThenable(x) {
-  return (
-    x != null &&
-    (typeof x === 'object' || typeof x === 'function') &&
-    'then' in x &&
-    typeof x.then === 'function'
-  )
+function isThenable(x: any): boolean %checks {
+  return isDefined(x) && (isObject(x) || isFunction(x)) && isFunction(x.then)
 }
 
-function getClassName(x) {
-  let ctor = x.constructor
-  let className = ctor && ctor.name
-  return className
+function isObject(x: mixed): boolean %checks {
+  return x !== null && typeof x === 'object'
 }
 
-Task.resolve = resolution => {
-  return new Task(resolve => {
-    resolve(resolution)
-  })
-
-  // if (isThenable(resolution)) {
-  //   if (getClassName(resolution) === 'Task') {
-  //     return resolution
-  //   } else {
-  //     return resolution.then(Task.resolve, Task.reject)
-  //   }
-  // } else {
-  //   return new Task(resolve => {
-  //     resolve(resolution)
-  //   })
-  // }
+function isDefined(x: any): boolean %checks {
+  return x !== void 0 || x !== null
 }
 
-Task.reject = rejection => {
+function isFunction(x: any): boolean %checks {
+  return typeof x === 'function'
+}
+
+Task.resolve = (resolution: any): TaskType => {
+  if (resolution instanceof Task) {
+    return resolution
+  } else {
+    return new Task(resolve => {
+      resolve(resolution)
+    })
+  }
+}
+
+Task.reject = (rejection: any): TaskType => {
+  // If `rejection` is a thenable it is NOT flattened (per ES6 behavior).
   return new Task((_, reject) => {
     reject(rejection)
   })
+}
 
-  // if (isThenable(rejection)) {
-  //   if (getClassName(rejection) === 'Task') {
-  //     return rejection
-  //   } else {
-  //     return rejection.then(Task.resolve, Task.reject)
-  //   }
-  // } else {
-  //   return new Task((_, reject) => {
-  //     reject(rejection)
-  //   })
-  // }
+Task.all = (array: Array<any>): TaskType => {
+  if (!Array.isArray(array)) {
+    return Task.reject(TypeError(`Expected Array, received ${typeof array}`))
+  } else if (array.length === 0) {
+    return Task.resolve([])
+  } else if (!array.some(isThenable)) {
+    return Task.resolve(array)
+  } else {
+    return new Task((resolve, reject) => {
+      let pending = array.length
+      let resolved = []
+
+      const pushResolve = (value: any): void => {
+        resolved.push(value)
+        pending -= 1
+        if (pending === 0) {
+          resolve(resolved)
+        }
+      }
+
+      array.forEach(value => {
+        if (isThenable(value)) {
+          value.then(pushResolve, reject)
+        } else {
+          defer(() => pushResolve(value))
+        }
+      })
+    })
+  }
+}
+
+Task.race = (tasks: Array<TaskType>): TaskType => {
+  // Exploits the execute-only-once behavior of the given executor functions
+  // (resolve/reject) to return the first task to call `resolve` or `reject`
+  return new Task((resolve, reject) => {
+    tasks.forEach(task => {
+      task.then(resolve).catch(reject)
+    })
+  })
 }

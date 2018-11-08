@@ -25,7 +25,8 @@
   "license": "MIT",
   "private": false,
   "scripts": {
-    "test": "yarn build && promises-aplus-tests test/spec.js",
+    "test:spec": "yarn build && promises-aplus-tests test/spec.js",
+    "test:utils": "yarn build && ava test/util.js",
     "build": "rollup --config",
     "build:watch": "rollup --config --watch",
     "format": "prettier --write **/*.{js,json,md}",
@@ -33,10 +34,11 @@
     "prepublish": "yarn clean && yarn test && yarn format"
   },
   "devDependencies": {
+    "ava": "^0.25.0",
     "babel-core": "^6.26.3",
     "babel-plugin-transform-class-properties": "^6.24.1",
     "babel-preset-flow": "^6.23.0",
-    "flow-bin": "^0.78.0",
+    "flow-bin": "^0.85.0",
     "prettier": "^1.14.2",
     "promises-aplus-tests": "*",
     "rollup": "^0.64.1",
