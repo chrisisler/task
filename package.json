@@ -1,6 +1,6 @@
 {
   "name": "Task",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Super sick conformant implementation of Promises/A+",
   "main": "lib/task.js",
   "module": "lib/task.es.js",
@@ -26,7 +26,8 @@
   "private": false,
   "scripts": {
     "test:spec": "yarn build && promises-aplus-tests test/spec.js",
-    "test:utils": "yarn build && ava test/util.js",
+    "test:util": "yarn build && ava test/util.js",
+    "test": "yarn test:spec && yarn test:util",
     "build": "rollup --config",
     "build:watch": "rollup --config --watch",
     "format": "prettier --write **/*.{js,json,md}",

@@ -11,7 +11,7 @@ deferred (and possibly asynchronous) computation.
 
 ## Install
 
-Not published on NPM yet.
+Not published to NPM yet.
 
 ## Usage
 
@@ -31,11 +31,8 @@ task
   })
 ```
 
-Promises basically 
-
 ## Goals
 
-- Implementation
 - Cancellation API
-- Helpful warnings
 - `task.finally(fn)`
+- Publish to NPM
