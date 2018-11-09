@@ -38,3 +38,4 @@ task
 ## Goals
 
 - `Task#cancel`
+- Use `Object.defineProperties` on methods

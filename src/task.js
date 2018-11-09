@@ -30,14 +30,14 @@ const warning =
 const Pending = Symbol('Pending') // Work in progress.
 const Resolved = Symbol('Resolved') // Work successfully completed.
 const Rejected = Symbol('Rejected') // Error caused while doing work.
-// const Cancelled = Symbol('Cancelled') // Work (and its errors) no longer needed.
+const Cancelled = Symbol('Cancelled') // Work (and any errors) no longer needed.
 
 type State = Symbol
 type TaskType = *
 type Executor = (
   resolve: (any) => void,
-  reject: (any) => void,
-  cancel: () => void
+  reject: (any) => void
+  // cancel: () => void
 ) => void
 type Reaction = any => void
 
@@ -57,7 +57,6 @@ export default function Task(executor?: Executor) {
         `Expected a function, instead received ${typeof executor}`
       )
     } else {
-      // Execute either `resolve` or `reject` only once.
       let executed = false
 
       const reject = (reason: any): void => {
@@ -74,13 +73,17 @@ export default function Task(executor?: Executor) {
         }
       }
 
-      const cancel = (): void => {
-        reject(Error('Cancelled'))
-      }
+      // const cancel = (): void => {
+      //   if (!executed) {
+      //     executed = true
+      //     settle(Cancelled, void 0)
+      //   }
+      // }
 
       // Handle `executor` behavior
       try {
-        const result = executor(resolve, reject, cancel)
+        const result = executor(resolve, reject)
+        // const result = executor(resolve, reject, cancel)
         warning(
           result != null,
           'Returning a value is a no-op. Call `resolve` or `reject` instead.'
@@ -108,26 +111,37 @@ export default function Task(executor?: Executor) {
     }
   }
 
-  this.resolve = resolvedValue => {
+  this.resolve = (resolvedValue: any): void => {
     settle(Resolved, resolvedValue)
   }
 
-  this.reject = rejectedValue => {
+  this.reject = (rejectedValue: any): void => {
     settle(Rejected, rejectedValue)
   }
 
-  function settle(completedState: State, completedValue: any): void {
-    if (state === Pending) {
-      state = completedState
-      value = completedValue
+  // this.cancel = (cancellationReason: any): void => {
+  //   settle(Cancelled, cancellationReason)
+  // }
+
+  function settle(settledState: State, settledValue: any): void {
+    // Need `state` check here?
+    if (settledState === Cancelled && state !== Cancelled) {
+      state = settledState
+      value = settledValue
+      resolvedReactions = null
+      rejectedReactions = null
+    } else if (state === Pending) {
+      state = settledState
+      value = settledValue
 
       defer(() => {
+        // Check internal `state` again at the time that this deferred function
+        // is called
         let reactions =
           state === Resolved ? resolvedReactions : rejectedReactions
 
         // $FlowFixMe - This array will be defined at this time.
         reactions.filter(isFunction).forEach((r: Reaction) => {
-          // check for cancellation here?
           r(value)
         })
 
@@ -138,12 +152,29 @@ export default function Task(executor?: Executor) {
   }
 }
 
+// class CancellationError extends Error {
+//   constructor(message: string) {
+//     this.message = message
+//     this.name = 'CancellationError'
+
+//     // Bluebird does this for some reason
+//     if (isFunction(Error.captureStackTrace)) {
+//       Error.captureStackTrace(this, this.constructor)
+//     } else {
+//       super()
+//     }
+//   }
+// }
+
 Task.prototype = {
   constructor: Task,
   catch: function(onRejected?: any => ?any): TaskType {
     return this.then(void 0, onRejected)
   },
   then: function(onResolved?: any => ?any, onRejected?: any => ?any): TaskType {
+    // if (this.isCancelled()) {
+    //   return Task.reject(new CancellationError('Task already cancelled'))
+    // }
     let task = new Task()
 
     const resolveReaction: Reaction = resolvedValue => {
@@ -175,6 +206,8 @@ Task.prototype = {
 
     return task
   },
+  // TODO: `onFinally` must be invoked (if it is a function) even if
+  // `Task#cancel` was called.
   finally: function<A: TaskType | any>(onFinally?: () => A): TaskType {
     if (!isFunction(onFinally)) {
       return this

@@ -44,7 +44,7 @@ test('Task#all', async t => {
   // }
 })
 
-test('Task#finally', t => {
+test('Task#finally', async t => {
   //
   // Finally does not get any input values
   //
