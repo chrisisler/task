@@ -26,13 +26,19 @@ const warning =
       }
     : function warningMuted(condition: boolean, message: string): void {}
 
-const Pending = Symbol('Pending')
-const Resolved = Symbol('Resolved')
-const Rejected = Symbol('Rejected')
+// States:
+const Pending = Symbol('Pending') // Work in progress.
+const Resolved = Symbol('Resolved') // Work successfully completed.
+const Rejected = Symbol('Rejected') // Error caused while doing work.
+// const Cancelled = Symbol('Cancelled') // Work (and its errors) no longer needed.
 
 type State = Symbol
 type TaskType = *
-type Executor = (resolve: (any) => void, reject: (any) => void) => void
+type Executor = (
+  resolve: (any) => void,
+  reject: (any) => void,
+  cancel: () => void
+) => void
 type Reaction = any => void
 
 export default function Task(executor?: Executor) {
@@ -51,6 +57,7 @@ export default function Task(executor?: Executor) {
         `Expected a function, instead received ${typeof executor}`
       )
     } else {
+      // Execute either `resolve` or `reject` only once.
       let executed = false
 
       const reject = (reason: any): void => {
@@ -67,8 +74,13 @@ export default function Task(executor?: Executor) {
         }
       }
 
+      const cancel = (): void => {
+        reject(Error('Cancelled'))
+      }
+
+      // Handle `executor` behavior
       try {
-        const result = executor(resolve, reject)
+        const result = executor(resolve, reject, cancel)
         warning(
           result != null,
           'Returning a value is a no-op. Call `resolve` or `reject` instead.'
@@ -115,6 +127,7 @@ export default function Task(executor?: Executor) {
 
         // $FlowFixMe - This array will be defined at this time.
         reactions.filter(isFunction).forEach((r: Reaction) => {
+          // check for cancellation here?
           r(value)
         })
 
@@ -133,9 +146,8 @@ Task.prototype = {
   then: function(onResolved?: any => ?any, onRejected?: any => ?any): TaskType {
     let task = new Task()
 
-    const hasOnResolved = isFunction(onResolved)
     const resolveReaction: Reaction = resolvedValue => {
-      if (hasOnResolved) {
+      if (isFunction(onResolved)) {
         try {
           // $FlowFixMe - `onResolved` is a function in this block.
           resolutionProcedure(task, onResolved(resolvedValue))
@@ -149,11 +161,6 @@ Task.prototype = {
 
     const rejectReaction: Reaction = rejectedValue => {
       if (isFunction(onRejected)) {
-        // `foo.then(onRes, onRej)` is an anti-pattern, warn the user.
-        // warning(
-        //   hasOnResolved,
-        //   'Prefer using Task#catch over Task#then for error propagation'
-        // )
         try {
           resolutionProcedure(task, onRejected(rejectedValue))
         } catch (error) {
@@ -167,10 +174,56 @@ Task.prototype = {
     this.done(resolveReaction, rejectReaction)
 
     return task
+  },
+  finally: function<A: TaskType | any>(onFinally?: () => A): TaskType {
+    if (!isFunction(onFinally)) {
+      return this
+    } else {
+      let invokedWrapper = false
+      const onFinallyWrapper = (): ?A => {
+        if (!invokedWrapper) {
+          invokedWrapper = true
+          // $FlowFixMe - `onFinally()` is defined here via `isFunction`.
+          return onFinally()
+        }
+      }
+
+      return new Task((resolve, reject) => {
+        const onResolved = resolved => {
+          let result = onFinallyWrapper()
+          if (isThenable(result)) {
+            // prettier-ignore
+            result.then(
+              () => { resolve(resolved) },
+              innerRejected => { reject(innerRejected) }
+            )
+          } else {
+            resolve(resolved)
+          }
+        }
+
+        const onRejected = rejected => {
+          try {
+            let result = onFinallyWrapper()
+            if (isThenable(result)) {
+              // prettier-ignore
+              result.then(
+                () => { reject(rejected) },
+                innerRejected => { reject(innerRejected) }
+              )
+            } else {
+              reject(rejected)
+            }
+          } catch (error) {
+            reject(error)
+          }
+        }
+
+        this.then(onResolved).catch(onRejected)
+      })
+    }
   }
-  // finally: function() {
-  // TODO
-  // }
+  // cancel: function() {}
 }
 
 function resolutionProcedure(task: TaskType, x: any): void {
@@ -232,6 +285,7 @@ function isFunction(x: any): boolean %checks {
 }
 
 Task.resolve = (resolution: any): TaskType => {
+  // NOTE: `instanceof` does not work across portals.
   if (resolution instanceof Task) {
     return resolution
   } else {

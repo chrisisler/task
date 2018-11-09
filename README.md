@@ -7,11 +7,12 @@ deferred (and possibly asynchronous) computation.
 
 - Zero dependencies
 - [Promises/A+](https://promisesaplus.com) compliant
-- Cancellable
+- Same behavior as ES6 Promises
+- Cancellable [WIP]
 
 ## Install
 
-Not published to NPM yet.
+Not published yet.
 
 ## Usage
 
@@ -29,10 +30,11 @@ task
   .catch(error => {
     console.error(error)
   })
+  .finally(() => {
+    console.log('done!')
+  })
 ```
 
 ## Goals
 
-- Cancellation API
-- `task.finally(fn)`
-- Publish to NPM
+- `Task#cancel`

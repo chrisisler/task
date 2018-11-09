@@ -43,3 +43,114 @@ test('Task#all', async t => {
   //   t.is(error, 'oh no!')
   // }
 })
+
+test('Task#finally', t => {
+  //
+  // Finally does not get any input values
+  //
+  const noInputCases = () => {
+    Task.resolve('yes').finally(resolved => {
+      t.is(resolved, void 0)
+    })
+
+    Task.reject('foo').finally(rejected => {
+      t.is(rejected, void 0)
+    })
+
+    Task.all([Task.resolve(1), Task.resolve(2)]).finally(tasks => {
+      t.is(tasks, void 0)
+    })
+  }
+
+  //
+  // The return value of `finally` is not used unless it is the content of a
+  // rejection or a thrown value (thrown thenables are not unboxed).
+  //
+  const resolveCases = () => {
+    Task.resolve('chocolate cake')
+      .finally(() => {
+        return 42
+      })
+      .then(resolved => {
+        t.is(resolved, 'chocolate cake')
+      })
+
+    Task.resolve('pizza')
+      .finally(() => {
+        return Task.resolve(42)
+      })
+      .then(resolved => {
+        t.is(resolved, 'pizza')
+      })
+
+    Task.resolve('rejected foo')
+      .finally(() => {
+        return Task.reject('rejected message')
+      })
+      .then(() => {
+        t.fail('never going to happen - unreachable')
+      })
+      .catch(rejected => {
+        t.is(rejected, 'rejected message')
+      })
+
+    Task.resolve('rejected foo')
+      .finally(() => {
+        throw 'thrown message'
+      })
+      .then(() => {
+        t.fail('never going to happen - unreachable')
+      })
+      .catch(rejected => {
+        t.is(rejected, 'thrown message')
+      })
+  }
+  resolveCases()
+
+  const rejectCases = () => {
+    Task.reject('rejected chocolate cake')
+      .finally(() => {
+        return 42
+      })
+      .then(() => {
+        t.fail('never going to happen - unreachable')
+      })
+      .catch(rejected => {
+        t.is(rejected, 'rejected chocolate cake')
+      })
+
+    Task.reject('rejected pizza')
+      .finally(() => {
+        return Task.resolve(42)
+      })
+      .then(() => {
+        t.fail('never going to happen - unreachable')
+      })
+      .catch(rejected => {
+        t.is(rejected, 'rejected pizza')
+      })
+
+    Task.reject('zzzzzzzzzzzzzzzzzzzzzz')
+      .finally(() => {
+        return Task.reject('rejected message')
+      })
+      .then(() => {
+        t.fail('never going to happen - unreachable')
+      })
+      .catch(rejected => {
+        t.is(rejected, 'rejected message')
+      })
+
+    Task.reject('zzzzzzzzzzzzzzzzzzzzzz')
+      .finally(() => {
+        throw 'thrown message'
+      })
+      .then(() => {
+        t.fail('never going to happen - unreachable')
+      })
+      .catch(rejected => {
+        t.is(rejected, 'thrown message')
+      })
+  }
+  rejectCases()
+})
